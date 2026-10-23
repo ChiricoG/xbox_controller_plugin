@@ -8,19 +8,25 @@
 PLUGIN_NAME := xbox_controller
 
 # OpenOrbis toolchain path
-OO_PS4_TOOLCHAIN ?= /home/doug/openorbis-toolchain
+OO_PS4_TOOLCHAIN ?= /opt/openorbis
 
 # GoldHEN SDK path
-GOLDHEN_SDK ?= /home/doug/xbox_controller_plugin/sdk/GoldHEN_Plugins_SDK
+GOLDHEN_SDK ?= $(CURDIR)/sdk/GoldHEN_Plugins_SDK
 
 # ============================================
-# Toolchain (Linux)
+# Toolchain
 # ============================================
 
 CC      := clang
 CCX     := clang++
 LD      := ld.lld
-CDIR    := linux
+
+UNAME_S := $(shell uname -s)
+ifeq ($(UNAME_S),Darwin)
+    CDIR := macos
+else
+    CDIR := linux
+endif
 
 # ============================================
 # Directories

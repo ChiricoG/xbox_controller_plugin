@@ -2,8 +2,13 @@
 bin/
 obj/
 
+# GoldHEN SDK compiled output (fetched and built locally)
+sdk/GoldHEN_Plugins_SDK/build/
+sdk/GoldHEN_Plugins_SDK/libGoldHEN_Hook.a
+
 # Editor files
 *.swp
 *.swo
 *~
 .vscode/
+.idea/

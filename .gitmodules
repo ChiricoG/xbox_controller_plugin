@@ -1,0 +1,3 @@
+[submodule "sdk/GoldHEN_Plugins_SDK"]
+	path = sdk/GoldHEN_Plugins_SDK
+	url = https://github.com/GoldHEN/GoldHEN_Plugins_SDK.git
