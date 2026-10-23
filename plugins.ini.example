@@ -1,10 +1,12 @@
 # GoldHEN Plugins Configuration
 # Copy this to /data/GoldHEN/plugins.ini on your PS4
+#
+# IMPORTANT: Do NOT load this plugin under [default]!
+# Loading it under [default] will cause the PS4 to crash when launching homebrew applications.
+# Always specify the game Title ID (e.g., CUSAXXXXX) where you want to use the controller:
 
-# [default] section loads for all games
-[default]
+[CUSA00123]
 /data/GoldHEN/plugins/xbox_controller.prx
 
-# You can also load plugins for specific games by title ID:
-# [CUSA00001]
+# [CUSA00456]
 # /data/GoldHEN/plugins/xbox_controller.prx

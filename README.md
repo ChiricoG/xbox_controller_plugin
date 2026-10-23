@@ -53,16 +53,18 @@ Xbox controllers work as Player 2 in local multiplayer games! DS4 remains Player
 
 ## Installation
 
-1. Connect to your PS4 via FTP (port 2121)
-2. Upload `xbox_controller.prx` to `/data/GoldHEN/plugins/`
-3. Create or edit `/data/GoldHEN/plugins.ini`:
+1. Connect to your PS4 via FTP (port 2121).
+2. Upload `xbox_controller.prx` to `/data/GoldHEN/plugins/`.
+3. Create or edit `/data/GoldHEN/plugins.ini`. Add the plugin under the Title ID / product code (`[CUSAXXXXX]`) of the game you want to play:
    ```ini
-   [default]
+   [CUSAXXXXX]
    /data/GoldHEN/plugins/xbox_controller.prx
    ```
-4. Launch a game — the plugin will load automatically.
+   > **WARNING:** Do **NOT** enable this plugin under `[default]`. Enabling it globally will cause your PS4 to crash when launching homebrew applications. Always bind it to specific game Title IDs.
 
-To disable: remove or comment out the plugin line in `plugins.ini`.
+4. Launch the game — the plugin will load automatically.
+
+To disable: remove or comment out the plugin line for that specific Title ID in `plugins.ini`.
 
 ---
 
