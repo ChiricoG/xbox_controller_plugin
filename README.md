@@ -2,16 +2,20 @@
 
 A GoldHEN plugin that enables Xbox and Nintendo Switch USB controllers on jailbroken PS4 consoles.
 
-## Status: WORKING (Single Player + Local Multiplayer)
+## Status: WORKING (Global Game Support: Single Player Merge + Local Multiplayer Secondary)
 
-Xbox controllers work as Player 2 in local multiplayer games! DS4 remains Player 1.
+Xbox and Switch controllers work as:
+- **Global `[default]` Support:** works automatically across all PlayStation 4 games with a single `[default]` entry in `plugins.ini`, while safely bypassing homebrew utilities so they never crash.
+- **Player 1 (Single Player)** in `merge` mode (1 user logged in), usable alongside or in place of the DualShock 4.
+- **Player 2 (Local Multiplayer)** in `secondary` mode (2+ users logged in).
+- **Hotplug supported:** connect, disconnect, and reconnect controllers freely at any time.
 
 ### Supported Controllers
 
 **Xbox Controllers:**
-- Xbox 360 wired USB controller
-- Xbox One wired USB controller
-- Xbox Series X|S wired USB controller
+- Xbox 360 wired USB controller (with vibration support)
+- Xbox One wired USB controller (with vibration support & Guide button)
+- Xbox Series X|S wired USB controller (with vibration support & Guide button)
 - Xbox Elite controllers (wired)
 
 **Third-Party Xbox Controllers (PowerA, Hori, Razer, 8BitDo, Mad Catz, PDP, etc.):**
@@ -28,26 +32,53 @@ Xbox controllers work as Player 2 in local multiplayer games! DS4 remains Player
 - PDP Faceoff Deluxe Wired Pro Controller
 - PDP Wired Fight Pad Pro
 
-**Note for Xbox One/Series controllers:** The controller must be **off** (Xbox button unlit) when launching the game. The plugin will detect and initialize it automatically. If the controller is already turned on, unplug and reconnect it, or turn it off before starting the game.
+### Modes & Runtime Switching
+
+The plugin operates in one of three modes (no `.ini` configuration file is needed):
+
+| Mode | Behavior | When to Use |
+|------|----------|-------------|
+| **`AUTO`** *(Default)* | Automatically selects **`MERGE (P1)`** if **1 user** is logged into the PS4, or **`SECONDARY (P2)`** if **2+ users** are logged in. | Everyday use — works automatically for both single-player and local co-op. |
+| **`MERGE (P1)`** | Overlays the Xbox/Switch controller inputs onto Player 1's DualShock 4 handle. Both controllers work simultaneously (and you can even turn off the DS4 once the game is running). | Single-player games, or when 2+ users are logged in on the console but you still want the Xbox pad to control Player 1. |
+| **`SECONDARY (P2)`** | Assigns the Xbox/Switch controller to the second logged-in user via a dedicated virtual handle (`1001`), while the DualShock 4 controls Player 1. | Local multiplayer / split-screen / co-op games. |
+
+#### Manual Mode Switch Combo
+Hold **`LB + RB + Back + Start`** *(Xbox)* or **`L + R + - + +`** *(Switch)* simultaneously for **~1.5 seconds** at any time in-game to cycle through modes:
+`AUTO` → `SECONDARY (P2)` → `MERGE (P1)` → `AUTO`
+
+An on-screen notification will confirm the active mode. (Mode selection is temporary for the current session and resets to `AUTO` when the game closes.)
+
+### Special Controls
+- **Central Xbox Guide / Home Button:** Mapped directly to **Touchpad Click (`DS4_BUTTON_TOUCHPAD`)**. Press the central Xbox glowing logo button to instantly open the Map, Inventory, or Journal in any PS4 game.
+- **Back / View Button (*Minus* `-` on Switch):** 
+  - **Tap (< 2 seconds):** Sends a **Share Button (`DS4_BUTTON_SHARE`)** pulse.
+  - **Hold (>= 2 seconds):** Also acts as Touchpad Click.
+- **Mode Switch Combo:** Hold **LB + RB + Back + Start** for **1.5 seconds** to cycle modes (`AUTO` -> `SECONDARY (P2)` -> `MERGE (P1)`).
 
 ### What Works
-- Full button mapping (A/B/X/Y, bumpers, triggers, sticks, D-pad)
-- Low-latency input (1ms polling, 2ms timeout)
-- **Local multiplayer** - Xbox controller as Player 2, DS4 as Player 1
+- Global `[default]` mode in `plugins.ini` (automatically active across all retail PS4 games; safely bypasses homebrew utilities so they never crash)
+- Full button mapping (A/B/X/Y, bumpers, triggers, sticks, D-pad, Touchpad Click via Guide button, Share)
+- Dedicated 250 Hz background USB polling thread (non-blocking, low latency)
 - Dynamic descriptor-based detection for official and third-party controllers
+- Hotplugging: automatic detection on disconnect and reconnect at any time
+- Automatic `merge` (1 user) and `secondary` (2+ users) modes with runtime combo override
+- Rumble/vibration feedback on Xbox 360 and Xbox One/Series
+- Diagnostics logging to notifications and `/data/GoldHEN/xbox_controller.log` (with 64 KB rotation)
 
 ### Not Supported
-- Rumble/vibration feedback
-- Wireless/Bluetooth Xbox controllers
+- Navigating the native PS4 System Dashboard / XMB (the PS4 Dashboard receives input strictly via kernel drivers `/dev/btpad` and cannot be controlled by userland `scePadRead` plugins like `remotePad` or `gamepad_helper`)
+- Wireless/Bluetooth Xbox controllers without USB cable
+- Controller headphone audio passthrough
+- Console power-on and initial GoldHEN activation before the plugin is loaded
 
 ---
 
 ## Requirements
 
-- Jailbroken PS4 (tested on 9.00)
-- GoldHEN 2.3 or newer
+- Jailbroken PS4 (tested on firmware 9.00 up to 13.52)
+- GoldHEN (latest version, or 2.3+)
 - Supported **wired** USB controller (Xbox 360/One/Series or PDP Switch controller)
-- DualShock 4 controller (required for system menu navigation and Player 1)
+- DualShock 4 controller (required to turn on the console and activate GoldHEN)
 
 ---
 
@@ -55,38 +86,49 @@ Xbox controllers work as Player 2 in local multiplayer games! DS4 remains Player
 
 1. Connect to your PS4 via FTP (port 2121).
 2. Upload `xbox_controller.prx` to `/data/GoldHEN/plugins/`.
-3. Create or edit `/data/GoldHEN/plugins.ini`. Add the plugin under the Title ID / product code (`[CUSAXXXXX]`) of the game you want to play:
+3. Create or edit `/data/GoldHEN/plugins.ini`. Enable the plugin under `[default]` so it automatically works across all your games:
    ```ini
-   [CUSAXXXXX]
+   [default]
    /data/GoldHEN/plugins/xbox_controller.prx
    ```
-   > **WARNING:** Do **NOT** enable this plugin under `[default]`. Enabling it globally will cause your PS4 to crash when launching homebrew applications. Always bind it to specific game Title IDs.
+   *(Alternatively, if you only want it on specific games, you can place it under a Title ID section such as `[CUSAXXXXX]`.)*
 
-4. Launch the game — the plugin will load automatically.
+4. Launch any game — the Xbox controller is automatically detected and ready. Homebrew apps (Apollo, Cheats Manager, Store, Itemzflow, PS4-Explorer) are automatically bypassed so they never crash under `[default]`.
 
-To disable: remove or comment out the plugin line for that specific Title ID in `plugins.ini`.
+To disable: remove or comment out the plugin line in `plugins.ini`.
 
 ---
 
-## Multiplayer Setup
+## How to Use
 
-For local multiplayer:
+### Single Player Setup (`MERGE` Mode)
 
-1. **Create a second PS4 user profile** (`Settings` > `Users` > `Create User`)
+1. Log in with **1 user profile** on your PS4 using your DualShock 4.
+2. Plug in your wired Xbox or Switch controller (before or after launching the game — hotplug is supported).
+3. Launch the game. Because only 1 user is logged in, `AUTO` mode automatically selects **`MERGE (P1)`**.
+4. Play using the Xbox/Switch controller as Player 1:
+   - You can leave the DualShock 4 on alongside the Xbox controller (useful if a game requires touchpad swipes or gyro aiming), **or** turn off the DualShock 4 after the game has started.
+   - *Tip:* If you have 2 user profiles logged in on your PS4 (which causes `AUTO` to default to `SECONDARY`), simply hold **`LB + RB + Back + Start`** for 1.5 seconds to switch to **`MERGE (P1)`**.
+
+### Local Multiplayer Setup (`SECONDARY` Mode)
+
+For 2-player local multiplayer / co-op:
+
+1. **Create a second PS4 user profile** (`Settings` > `Users` > `Create User`).
 2. **Log in both users** before launching the game:
-   - Profile 1 (Player 1 — DS4)
-   - Profile 2 (Player 2 — Xbox controller)
-3. Launch the game.
-4. Notifications will confirm controller detection and Player 2 assignment.
+   - Profile 1 (Player 1 — DualShock 4)
+   - Profile 2 (Player 2 — Xbox/Switch controller)
+3. Launch the game. Because 2+ users are logged in, `AUTO` mode automatically selects **`SECONDARY (P2)`**.
+4. On-screen notifications will confirm controller detection and Player 2 assignment.
 5. Both controllers now operate independently.
 
-> **Note:** Both users must be signed in at the PS4 system level before starting the game. The plugin automatically detects and assigns the Xbox controller to the second logged-in user.
+> **Note:** Both users must be signed in at the PS4 system level before starting the game.
 
-### Drop-in Games (Diablo III, etc.)
+#### Drop-in Games (Diablo III, etc.)
 
-For games where Player 2 joins mid-game by pressing Start:
+For games where Player 2 joins mid-game by pressing Start/Options:
 1. **Create your Player 2 character on the second profile first** (launch the game once as Player 2 to create save data before attempting co-op).
-2. Once the character exists, press Start on the Xbox controller to drop into the session.
+2. Once the character exists, press **Start** on the Xbox controller to drop into the session.
 
 ---
 
@@ -104,11 +146,12 @@ For games where Player 2 joins mid-game by pressing Start:
 | RB | R1 |
 | LT | L2 |
 | RT | R2 |
-| Back | Share |
-| Start | Options |
-| Guide | PS Button |
+| Back / View | Share *(short press < 2 s)* / Touchpad Click *(hold ≥ 2 s)* |
+| Start / Menu | Options |
+| Guide | PS Button *(in-game bit)* |
 | L3 | L3 |
 | R3 | R3 |
+| LB + RB + Back + Start *(hold 1.5 s)* | Cycle Plugin Mode (`AUTO` → `SECONDARY` → `MERGE`) |
 
 ### Switch Controllers (PDP)
 
@@ -122,11 +165,12 @@ For games where Player 2 joins mid-game by pressing Start:
 | R | R1 |
 | ZL | L2 |
 | ZR | R2 |
-| - | Share |
-| + | Options |
-| Home | PS Button |
+| - (Minus) | Share *(short press < 2 s)* / Touchpad Click *(hold ≥ 2 s)* |
+| + (Plus) | Options |
+| Home | PS Button *(in-game bit)* |
 | L3 | L3 |
 | R3 | R3 |
+| L + R + - + + *(hold 1.5 s)* | Cycle Plugin Mode (`AUTO` → `SECONDARY` → `MERGE`) |
 
 *Note: Switch controllers follow positional mapping (A corresponds to Circle, B to Cross).*
 
@@ -134,12 +178,12 @@ For games where Player 2 joins mid-game by pressing Start:
 
 ## Limitations
 
-- Touchpad input is not supported on third-party controllers.
-- Motion controls (gyroscope/accelerometer) are unavailable.
+- **Touchpad gestures/swipes** are not available on Xbox/Switch controllers (however, **Touchpad Click** is supported by holding `Back`/`View`/`-` for 2 seconds, and in `MERGE` mode you can still swipe on the physical DS4 touchpad).
+- **Motion controls** (gyroscope/accelerometer) are unavailable on Xbox/Switch controllers (in `MERGE` mode, the physical DS4's motion sensors remain active).
+- **Console power-on and initial GoldHEN activation** require a DualShock 4 before the plugin is loaded.
 - Lightbar color feedback is not supported.
 - Controller headphone audio passthrough is not supported.
-- System menu operation requires an original DS4.
-- Switch controller triggers operate digitally (full press only).
+- Switch PDP controller triggers operate digitally (full press only) and do not support vibration.
 
 ---
 
@@ -190,22 +234,18 @@ Output: `bin/xbox_controller.prx`
 
 ## Technical Details
 
-This plugin hooks several PS4 system APIs:
-- `scePadOpen` / `scePadClose` — Virtual controller registration
-- `scePadRead` / `scePadReadState` — Controller input injection into application space
+This plugin hooks and coordinates several PS4 system APIs:
+- **Dynamic Runtime Symbol Resolution (`sys_dynlib_load_prx` + `sys_dynlib_dlsym`)** — The PRX links only against `libkernel` and `libSceLibcInternal` (`0` static `R_X86_64_GLOB_DAT` relocations), resolving `libScePad`, `libSceUsbd`, and `libSceUserService` dynamically at runtime so it can load safely under `[default]` into Retail Games, Homebrew Apps, and `SceShellUI`.
+- **Process Filtering & `SceShellUI` Auto-Injection (`sys_sdk_proc_info` / `sys_sdk_proc_prx_load`)** — Automatically skips non-UI system daemons (`NPXS*` except `NPXS20001`) and helper subprocesses (`WebProcess`, `compiler`, `Daemon`, `Dialog`), while injecting once per boot session into `SceShellUI` (`NPXS20001`) for Dashboard control.
+- **Cross-Process Shared State (`/data/GoldHEN/xbox_ipc.bin`)** — Coordinates the active USB Master and IPC Clients via `sceKernelPread` / `sceKernelPwrite` so `SceShellUI` and the running Game share translated pad inputs, mode changes, and rumble requests without `sceUsbdClaimInterface` conflicts, while respecting `ORBIS_PAD_BUTTON_INTERCEPTED` (`0x80000000`) input focus.
+- `scePadOpen` / `scePadClose` / `scePadGetHandle` — Real handle tracking (`MERGE`) and virtual controller registration (`SECONDARY`, handle `1001`)
+- `scePadRead` / `scePadReadState` — Controller input overlay (`MERGE`) and virtual/fallback pad injection (`SECONDARY`)
 - `scePadGetControllerInformation` — Pad status and capability reporting
-- `sceUserServiceGetLoginUserIdList` — User ID assignment for local co-op
-- `sceUsbd` — USB enumeration, descriptor parsing, and interrupt transfer polling
-- Endpoint and interface configuration resolved dynamically via USB descriptors
-- GIP / XInput HID report parsing translated into PS4 `OrbisPadData` structures
-
----
-
-## Roadmap
-
-### PSN Spoof for Local Multiplayer (Planned)
-
-Certain titles (e.g. Minecraft Bedrock) verify PSN availability even for offline split-screen co-op. A planned update will hook `libSceNpManager` availability routines (`sceNpCheckNpAvailability`, `sceNpGetState`, `sceNpHasSignedUp`) to return offline spoofed status.
+- `scePadSetVibration` — Rumble forwarding to Xbox 360 and Xbox One/Series controllers
+- `scePadSetLightBar` / `scePadResetLightBar` / `scePadSetMotionSensorState` — Safe virtual handle stubs (verified via HDE64 prologue disassembly)
+- `sceUserServiceGetLoginUserIdList` / `sceUserServiceGetForegroundUser` — User counting for `AUTO` mode and Player 2 assignment
+- `sceUsbd` — Dedicated 250 Hz background polling thread (`scePthreadCreate`), USB hotplug scanner, descriptor parsing, and interrupt transfers
+- Diagnostics logger (`src/log.c`) writing to `/data/GoldHEN/xbox_controller.log` via direct `libkernel` file I/O
 
 ---
 

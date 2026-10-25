@@ -8,10 +8,10 @@
 PLUGIN_NAME := xbox_controller
 
 # OpenOrbis toolchain path
-OO_PS4_TOOLCHAIN ?= /opt/openorbis
+OO_PS4_TOOLCHAIN ?= /home/doug/openorbis-toolchain
 
 # GoldHEN SDK path
-GOLDHEN_SDK ?= $(CURDIR)/sdk/GoldHEN_Plugins_SDK
+GOLDHEN_SDK ?= /home/doug/xbox_controller_plugin/sdk/GoldHEN_Plugins_SDK
 
 # ============================================
 # Toolchain
@@ -21,11 +21,12 @@ CC      := clang
 CCX     := clang++
 LD      := ld.lld
 
-UNAME_S := $(shell uname -s)
-ifeq ($(UNAME_S),Darwin)
-    CDIR := macos
+ifeq ($(OS),Windows_NT)
+    CDIR := windows
+    EXE  := .exe
 else
     CDIR := linux
+    EXE  :=
 endif
 
 # ============================================
@@ -70,6 +71,8 @@ CFLAGS += -I$(INC_DIR)
 # PS4-specific defines
 CFLAGS += -D__PS4__
 CFLAGS += -D__ORBIS__
+CFLAGS += -fno-delete-null-pointer-checks
+CFLAGS += -MMD -MP
 
 # ============================================
 # Linker Flags (matching working GoldHEN plugins)
@@ -83,14 +86,10 @@ LDFLAGS += --eh-frame-hdr
 LDFLAGS += -L$(OO_PS4_TOOLCHAIN)/lib
 LDFLAGS += -L$(GOLDHEN_SDK)
 
-# Libraries
+# Libraries (libScePad, libSceUsbd, libSceUserService are loaded & resolved dynamically via sys_dynlib_dlsym)
 LIBS := -lSceLibcInternal
 LIBS += -lGoldHEN_Hook
 LIBS += -lkernel
-LIBS += -lScePad
-LIBS += -lSceUsbd
-LIBS += -lSceSysmodule
-LIBS += -lSceUserService
 
 # ============================================
 # Build Rules
@@ -122,7 +121,7 @@ $(TARGET_ELF): $(OBJS)
 # Create PRX
 $(TARGET_PRX): $(TARGET_ELF)
 	@echo "Creating PRX..."
-	$(OO_PS4_TOOLCHAIN)/bin/$(CDIR)/create-fself -in=$< -out=$(TARGET_OELF) --lib=$@ --paid 0x3800000000000011
+	$(OO_PS4_TOOLCHAIN)/bin/$(CDIR)/create-fself$(EXE) -in=$< -out=$(TARGET_OELF) --lib=$@ --paid 0x3800000000000011
 
 # Compile plugin source files
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c
@@ -157,8 +156,10 @@ install: $(TARGET_PRX)
 # Debug build
 # ============================================
 
-debug: CFLAGS += -DDEBUG_NOTIFICATIONS=1 -g -O0
+debug: CFLAGS := $(filter-out -O2,$(CFLAGS)) -DDEBUG_NOTIFICATIONS=1 -g -O0
 debug: all
+
+-include $(wildcard $(OBJ_DIR)/*.d)
 
 # ============================================
 # Help

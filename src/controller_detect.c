@@ -26,7 +26,7 @@ int controller_detect_by_descriptor(libusb_device* dev, DetectedController* out)
     }
 
     struct libusb_config_descriptor* cfg = NULL;
-    if (sceUsbdGetActiveConfigDescriptor(dev, &cfg) != 0 || cfg == NULL) {
+    if (usbd_get_active_config_descriptor(dev, &cfg) != 0 || cfg == NULL) {
         return 0;
     }
 
@@ -84,6 +84,6 @@ int controller_detect_by_descriptor(libusb_device* dev, DetectedController* out)
         }
     }
 
-    sceUsbdFreeConfigDescriptor(cfg);
+    usbd_free_config_descriptor(cfg);
     return found;
 }

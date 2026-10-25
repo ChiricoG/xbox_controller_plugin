@@ -7,8 +7,8 @@
 #define CONFIG_H
 
 // Plugin version
-#define PLUGIN_VERSION_MAJOR 0
-#define PLUGIN_VERSION_MINOR 1
+#define PLUGIN_VERSION_MAJOR 1
+#define PLUGIN_VERSION_MINOR 4
 #define PLUGIN_VERSION_PATCH 0
 
 // Xbox 360 Controller USB identifiers
@@ -39,7 +39,9 @@
 #define DEFAULT_TRIGGER_THRESHOLD 30    // Digital trigger activation point
 
 // Debug
+#ifndef DEBUG_NOTIFICATIONS
 #define DEBUG_NOTIFICATIONS     0       // Set to 1 for verbose notifications
+#endif
 
 // Helper macros
 #define IS_VIRTUAL_HANDLE(h)    ((h) >= VIRTUAL_HANDLE_BASE && (h) < VIRTUAL_HANDLE_BASE + MAX_XBOX_CONTROLLERS)

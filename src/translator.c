@@ -5,9 +5,7 @@
 
 #include "translator.h"
 #include <string.h>
-
-// Static timestamp counter
-static uint64_t s_timestamp = 0;
+#include <orbis/libkernel.h>
 
 /*
  * Initialize translator with default configuration
@@ -154,8 +152,8 @@ void translator_convert(const Xbox360Report* xbox, OrbisPadData* ds4, const Tran
     if (xbox_buttons & XBOX360_BTN_START) ds4_buttons |= DS4_BUTTON_OPTIONS;
     if (xbox_buttons & XBOX360_BTN_BACK)  ds4_buttons |= DS4_BUTTON_SHARE;
 
-    // Guide button -> PS button
-    if (xbox_buttons & XBOX360_BTN_GUIDE) ds4_buttons |= DS4_BUTTON_PS;
+    // Guide button -> Touchpad Click (immediate map/inventory access in games)
+    if (xbox_buttons & XBOX360_BTN_GUIDE) ds4_buttons |= DS4_BUTTON_TOUCHPAD;
 
     // ========================================
     // D-PAD
@@ -172,7 +170,10 @@ void translator_convert(const Xbox360Report* xbox, OrbisPadData* ds4, const Tran
     // ========================================
 
     ds4->connected = 1;
-    ds4->timestamp = s_timestamp++;
+    ds4->count = 1;
+    if (ds4->timestamp == 0) {
+        ds4->timestamp = sceKernelGetProcessTime();
+    }
 
     // Motion data - set to neutral
     ds4->quat.x = 0.0f;
@@ -312,7 +313,10 @@ void translator_convert_xboxone(const XboxOneReport* xbox, OrbisPadData* ds4, co
     // ========================================
 
     ds4->connected = 1;
-    ds4->timestamp = s_timestamp++;
+    ds4->count = 1;
+    if (ds4->timestamp == 0) {
+        ds4->timestamp = sceKernelGetProcessTime();
+    }
 
     // Motion data - set to neutral
     ds4->quat.x = 0.0f;
@@ -460,8 +464,8 @@ void translator_convert_switch(const SwitchInputOnlyReport* sw, OrbisPadData* ds
     if (sw->buttons1 & SWITCH_BTN_PLUS)  ds4_buttons |= DS4_BUTTON_OPTIONS;
     if (sw->buttons1 & SWITCH_BTN_MINUS) ds4_buttons |= DS4_BUTTON_SHARE;
 
-    // Home button -> PS button
-    if (sw->buttons1 & SWITCH_BTN_HOME) ds4_buttons |= DS4_BUTTON_PS;
+    // Home button -> Touchpad Click (immediate map/inventory access in games)
+    if (sw->buttons1 & SWITCH_BTN_HOME) ds4_buttons |= DS4_BUTTON_TOUCHPAD;
 
     // ========================================
     // D-PAD
@@ -477,7 +481,10 @@ void translator_convert_switch(const SwitchInputOnlyReport* sw, OrbisPadData* ds
     // ========================================
 
     ds4->connected = 1;
-    ds4->timestamp = s_timestamp++;
+    ds4->count = 1;
+    if (ds4->timestamp == 0) {
+        ds4->timestamp = sceKernelGetProcessTime();
+    }
 
     // Motion data - set to neutral
     ds4->quat.x = 0.0f;

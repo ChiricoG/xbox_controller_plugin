@@ -7,7 +7,12 @@
 #define HOOKS_H
 
 /*
- * Initialize USB subsystem for Xbox controller
+ * Configure current process identity (from sys_sdk_proc_info)
+ */
+void hooks_set_process_info(int pid, int is_shellui);
+
+/*
+ * Initialize USB & IPC subsystem for Xbox controller
  * Call ONCE from plugin_load, before hooks_install
  * @return 0 on success, negative on error (non-fatal)
  */

@@ -43,4 +43,8 @@ typedef struct {
  */
 int controller_detect_by_descriptor(libusb_device* dev, DetectedController* out);
 
+// Dynamically resolved USB config descriptor helpers (implemented in hooks.c)
+int32_t usbd_get_active_config_descriptor(libusb_device* dev, struct libusb_config_descriptor** config);
+void usbd_free_config_descriptor(struct libusb_config_descriptor* config);
+
 #endif // CONTROLLER_DETECT_H

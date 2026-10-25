@@ -5,6 +5,8 @@ obj/
 # GoldHEN SDK compiled output (fetched and built locally)
 sdk/GoldHEN_Plugins_SDK/build/
 sdk/GoldHEN_Plugins_SDK/libGoldHEN_Hook.a
+sdk/*.zip
+sdk/goldhen_sdk_extracted/
 
 # Editor files
 *.swp
@@ -12,3 +14,6 @@ sdk/GoldHEN_Plugins_SDK/libGoldHEN_Hook.a
 *~
 .vscode/
 .idea/
+
+# Local development / internal handoff notes (not for public repo)
+ANALISI_REPO.md
