@@ -41,23 +41,38 @@ int main() {
     sceUserServiceInitialize(&uParam);
     sceUserServiceGetInitialUser(&userId);
 
-    int padHandle = scePadOpen(userId, 0, 0, NULL);
+    // Standard handle for navigating the app (allows navigation with either DS4 or Xbox pad)
+    int navPadHandle = scePadOpen(userId, 0, 0, NULL);
+
+    // Dedicated pure Xbox handle (virtual handle 1001) for isolated testing without DualShock 4 merge
+    int xboxPadHandle = scePadOpen(0x58424F58, 0, 0, NULL);
 
     int activeTab = 0;
     int selectedCard = 0;
     int toastFrames = 0;
     int frameID = 0;
     uint32_t prevButtons = 0;
+    TesterState tester;
 
     // Main Interaction Loop
     for (;;) {
-        OrbisPadData padData;
-        memset(&padData, 0, sizeof(padData));
-        if (padHandle >= 0) {
-            scePadReadState(padHandle, &padData);
+        OrbisPadData navData;
+        memset(&navData, 0, sizeof(navData));
+        if (navPadHandle >= 0) {
+            scePadReadState(navPadHandle, &navData);
         }
 
-        uint32_t curButtons = padData.buttons;
+        if (xboxPadHandle < 0) {
+            xboxPadHandle = scePadOpen(0x58424F58, 0, 0, NULL);
+        }
+
+        OrbisPadData xboxData;
+        memset(&xboxData, 0, sizeof(xboxData));
+        if (xboxPadHandle >= 0) {
+            scePadReadState(xboxPadHandle, &xboxData);
+        }
+
+        uint32_t curButtons = navData.buttons;
         uint32_t justPressed = curButtons & ~prevButtons;
         prevButtons = curButtons;
 
@@ -68,12 +83,24 @@ int main() {
             break;
         }
 
-        // Tab Switching via L1 / R1
+        // Tab Switching via L1 / R1 (3 Tabs: 0 = Settings, 1 = Tester & Calibration, 2 = Info)
         if (justPressed & ORBIS_PAD_BUTTON_L1) {
-            activeTab = 0;
+            activeTab = (activeTab + 2) % 3;
+            if (activeTab != 1 && tester.rumblePhase != 0) {
+                tester.rumbleFrames = 0;
+                tester.rumblePhase = 0;
+                OrbisPadVibeParam vibe = { 0, 0 };
+                if (xboxPadHandle >= 0) scePadSetVibration(xboxPadHandle, &vibe);
+            }
         }
         if (justPressed & ORBIS_PAD_BUTTON_R1) {
-            activeTab = 1;
+            activeTab = (activeTab + 1) % 3;
+            if (activeTab != 1 && tester.rumblePhase != 0) {
+                tester.rumbleFrames = 0;
+                tester.rumblePhase = 0;
+                OrbisPadVibeParam vibe = { 0, 0 };
+                if (xboxPadHandle >= 0) scePadSetVibration(xboxPadHandle, &vibe);
+            }
         }
 
         if (activeTab == 0) {
@@ -147,6 +174,89 @@ int main() {
                     toastFrames = 180; // ~3 seconds toast feedback
                 }
             }
+        } else if (activeTab == 1) {
+            // --- TESTER & CALIBRATION TAB ---
+            // Square: Start Vibration Test
+            if (justPressed & ORBIS_PAD_BUTTON_SQUARE) {
+                tester.rumbleFrames = 180; // 3 seconds
+            }
+
+            // Triangle: Start Drift Auto-Calibration
+            if (justPressed & ORBIS_PAD_BUTTON_TRIANGLE) {
+                tester.calib.active = true;
+                tester.calib.completed = false;
+                tester.calib.currentFrame = 0;
+                tester.calib.maxNoise = 0;
+            }
+
+            // Cross: Apply suggested deadzone if calibration completed
+            if (justPressed & ORBIS_PAD_BUTTON_CROSS) {
+                if (tester.calib.completed) {
+                    cfg.deadzone_index = tester.calib.suggestedIndex;
+                    if (configMgr.save()) {
+                        toastFrames = 180;
+                    }
+                    tester.calib.completed = false;
+                }
+            }
+
+            // Real-time processing for Rumble Test
+            if (tester.rumbleFrames > 0) {
+                tester.rumbleFrames--;
+                OrbisPadVibeParam vibe;
+                if (tester.rumbleFrames > 120) {
+                    // Phase 1: Left heavy motor
+                    tester.rumblePhase = 1;
+                    vibe.lgMotor = 255;
+                    vibe.smMotor = 0;
+                } else if (tester.rumbleFrames > 60) {
+                    // Phase 2: Right light motor
+                    tester.rumblePhase = 2;
+                    vibe.lgMotor = 0;
+                    vibe.smMotor = 255;
+                } else {
+                    // Phase 3: Both motors
+                    tester.rumblePhase = 3;
+                    vibe.lgMotor = 255;
+                    vibe.smMotor = 255;
+                }
+                if (xboxPadHandle >= 0) scePadSetVibration(xboxPadHandle, &vibe);
+            } else if (tester.rumblePhase != 0) {
+                tester.rumblePhase = 0;
+                OrbisPadVibeParam vibe = { 0, 0 };
+                if (xboxPadHandle >= 0) scePadSetVibration(xboxPadHandle, &vibe);
+            }
+
+            // Real-time processing for Drift Calibration (sample strictly from pure Xbox pad)
+            if (tester.calib.active) {
+                int devLX = abs((int)xboxData.leftStick.x - 128);
+                int devLY = abs((int)xboxData.leftStick.y - 128);
+                int devRX = abs((int)xboxData.rightStick.x - 128);
+                int devRY = abs((int)xboxData.rightStick.y - 128);
+
+                if (devLX > tester.calib.maxNoise) tester.calib.maxNoise = devLX;
+                if (devLY > tester.calib.maxNoise) tester.calib.maxNoise = devLY;
+                if (devRX > tester.calib.maxNoise) tester.calib.maxNoise = devRX;
+                if (devRY > tester.calib.maxNoise) tester.calib.maxNoise = devRY;
+
+                tester.calib.currentFrame++;
+                if (tester.calib.currentFrame >= tester.calib.totalFrames) {
+                    tester.calib.active = false;
+                    tester.calib.completed = true;
+
+                    // Find smallest deadzone >= (maxNoise + 2) in DEADZONE_VALUES
+                    int needed = tester.calib.maxNoise + 2;
+                    int bestIdx = 0;
+                    for (size_t i = 0; i < ConfigManager::DEADZONE_VALUES.size(); i++) {
+                        if (ConfigManager::DEADZONE_VALUES[i] >= needed) {
+                            bestIdx = (int)i;
+                            break;
+                        }
+                        bestIdx = (int)i;
+                    }
+                    tester.calib.suggestedIndex = bestIdx;
+                }
+            }
         } else {
             // In Info tab: CROSS or LEFT returns to Settings
             if ((justPressed & ORBIS_PAD_BUTTON_CROSS) || (justPressed & ORBIS_PAD_BUTTON_LEFT)) {
@@ -158,8 +268,8 @@ int main() {
             toastFrames--;
         }
 
-        // Render UI
-        ui->render(scene, cfg, activeTab, selectedCard, toastFrames);
+        // Render UI: pass xboxData to tester for pure hardware verification
+        ui->render(scene, cfg, activeTab, selectedCard, toastFrames, xboxData, tester);
 
         // Flip & VSync
         scene->SubmitFlip(frameID);
@@ -168,8 +278,13 @@ int main() {
         frameID++;
     }
 
-    if (padHandle >= 0) {
-        scePadClose(padHandle);
+    if (xboxPadHandle >= 0) {
+        OrbisPadVibeParam vibe = { 0, 0 };
+        scePadSetVibration(xboxPadHandle, &vibe);
+        scePadClose(xboxPadHandle);
+    }
+    if (navPadHandle >= 0) {
+        scePadClose(navPadHandle);
     }
 
     // Gracefully exit back to PS4 shell without CE-34878-0

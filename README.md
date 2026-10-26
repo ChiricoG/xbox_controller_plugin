@@ -24,12 +24,19 @@ An optional companion homebrew application (`.pkg`) is included for users who pr
   <img src="docs/images/app_settings.jpg" width="48%" alt="Configurator Settings" />
 </p>
 <p align="center">
+  <img src="docs/images/input_tester.jpg" width="48%" alt="Live Input Tester & Calibration" />
   <img src="docs/images/save_notification.jpg" width="48%" alt="Save Notification" />
-  <img src="docs/images/info_panel.jpg" width="48%" alt="Info & Documentation Panel" />
 </p>
 
 ### Configurator Features:
+- **3-Tab Navigation (L1 / R1):** Switch effortlessly between **Settings** (Tab 0), **Input Tester & Calibration** (Tab 1), and **Info & Help** (Tab 2).
 - **Comprehensive On-Console Configuration:** Adjust all 10 plugin parameters directly on your TV using a smooth 5-card scrollable viewport with real-time scrollbar and position tracking (Operating Mode, Guide Button, Stick Deadzone, Trigger Threshold, Swap Bumpers & Triggers, Vibration, GoldHEN Notifications, Mode Toggle Combo, Homebrew Navigation, and Switch Controller Layout).
+- **Live Input Tester & Calibration:**
+  - **Stick Reticles & Deadzone Visualizer:** Real-time dual stick crosshairs with live coordinates and dynamic dashed inner deadzone radius circle.
+  - **Triggers & Bumpers Telemetry:** Analog progress bars for LT and RT with percentage readouts and digital threshold indicators, plus real-time bumper status pills.
+  - **Vibration Feedback Test (Square):** Tests Left heavy motor, Right light motor, and dual-motor pulse with real-time visual phase feedback.
+  - **Stick Drift Auto-Calibration (Triangle):** Samples stick resting positions for 3 seconds to measure hardware noise, calculates the optimal recommended deadzone, and applies & saves it instantly on **Cross**.
+  - **Pure Hardware Isolation:** Utilizes virtual handle `1001` to test raw Xbox inputs and rumble completely isolated from DualShock 4 data, even in `MERGE (P1)` mode.
 - **Automatic Initialization:** Automatically creates `/data/GoldHEN/xbox_controller.ini` on first boot if missing, or reads and updates existing configuration.
 - **Instant Save:** Press **Cross (X)** to save settings immediately with a real-time confirmation toast banner.
 

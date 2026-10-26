@@ -2,6 +2,35 @@
 
 All notable changes to this project are documented in this file.
 
+## [1.4.2] - 2026-10-26
+
+### Added
+- **Live Input Tester & Stick Drift Auto-Calibration (Companion App .pkg)**:
+  - Added dedicated **Input Tester & Calibration Tab** (Tab 1), effortlessly navigable via **L1 / R1** alongside Settings (Tab 0) and Info & Help (Tab 2).
+  - **Live Analog Stick Reticles**: Real-time X/Y coordinate crosshairs for Left and Right sticks with dynamic dashed inner deadzone radius circle overlay, giving instant visual feedback on stick movement, centering, and potential drift.
+  - **Analog Triggers & Bumpers**: High-visibility progress bars for LT and RT showing 0-255 raw values and percentages with digital threshold activation tick markers, plus dedicated state pills for LB and RB.
+  - **Vibration Feedback Test**: Press **Square** to initiate a 3-second motor verification sequence (Phase 1: Left heavy low-frequency motor, Phase 2: Right light high-frequency motor, Phase 3: Both motors at full power) with live on-screen status updates.
+  - **Stick Drift Auto-Calibration**: Press **Triangle** to perform a 3-second (180-frame) rest-position noise measurement. The app automatically computes the lowest optimal deadzone setting required to eliminate drift, allowing one-click application and instant saving to `/data/GoldHEN/xbox_controller.ini` by pressing **Cross**.
+  - **Native PlayStation Button Icons**: Included authentic PNG button glyphs (`btn_square.png`, `btn_triangle.png`, `btn_cross_blue.png`, `btn_options.png`) for seamless visual presentation across the UI.
+- **Pure Xbox Hardware Isolation via Virtual Handle `1001`**:
+  - Introduced dedicated virtual handle `1001` (`XBOX_VIRTUAL_PAD_HANDLE`), accessible by opening user `0x58424F58` or specifying controller type `99` via `scePadOpen`.
+  - Enables diagnostic and configuration homebrew tools to read raw, pristine Xbox controller telemetry isolated completely from DualShock 4 inputs, even when running in `MERGE (P1)` mode.
+  - Built-in disconnected guard: gracefully displays a warning banner if no Xbox controller is connected to the USB ports.
+- **DualShock 4 Rumble Isolation**:
+  - Intercepted `scePadSetVibration` on virtual handle `1001`: sending rumble commands to handle `1001` vibrates strictly the Xbox controller without triggering DualShock 4 vibration motors.
+
+### Fixed
+- **Homebrew Virtual Handle Detours**:
+  - Installed `safe_install_detour32` on `scePadOpen` and `scePadClose` in homebrew process initialization (`g_is_homebrew`), allowing homebrew applications to acquire virtual pad handles like `1001`.
+- **Xbox One / Series GIP Rumble Protocol Offsets**:
+  - Corrected motor payload byte offsets in `send_rumble_packet()`: Left heavy motor mapped to byte 8, Right light motor mapped to byte 9, and continuous duration mapped to 0xFF.
+- **libScePad 32-bit Syscall Trampolines**:
+  - Replaced 14-byte 64-bit jump detours with safe 5-byte relative jump trampolines (`safe_install_detour32` within ±2GB allocator) on 11-byte `scePadSetVibration` syscall stubs, resolving skipped hooks on PS4 firmware.
+- **UI Footer Label Cleanup**:
+  - Removed duplicate "Exit" text in the Input Tester footer.
+
+---
+
 ## [1.4.1] - 2026-10-26
 
 ### Added

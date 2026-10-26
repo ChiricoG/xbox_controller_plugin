@@ -602,14 +602,14 @@ static void send_rumble_packet(uint8_t large, uint8_t small) {
         pkt[2] = g_gip_seq++;
         pkt[3] = 0x09;
         pkt[4] = 0x00;
-        pkt[5] = 0x0F;
-        pkt[6] = 0x00;
-        pkt[7] = 0x00;
-        pkt[8] = 0x00;
-        pkt[9] = 0x00;
-        pkt[10] = large;
-        pkt[11] = small;
-        pkt[12] = 0x00;
+        pkt[5] = 0x0F; // Motor mask: all 4 motors enabled
+        pkt[6] = 0x00; // Left trigger
+        pkt[7] = 0x00; // Right trigger
+        pkt[8] = large; // Left main grip motor (heavy rumble)
+        pkt[9] = small; // Right main grip motor (light rumble)
+        pkt[10] = (large > 0 || small > 0) ? 0xFF : 0x00; // Duration (continuous)
+        pkt[11] = 0x00; // Delay
+        pkt[12] = (large > 0 || small > 0) ? 0xFF : 0x00; // Repeat count
         p_sceUsbdInterruptTransfer(g_xbox_handle, g_ep_out, pkt, sizeof(pkt), &transferred, 10);
     }
 }
@@ -1320,6 +1320,14 @@ int32_t sceUserServiceGetLoginUserIdList_hook(OrbisUserServiceLoginUserIdList* u
 // ============================================
 
 int32_t scePadOpen_hook(int32_t userId, int32_t type, int32_t index, void* param) {
+    // Explicit request for pure Xbox controller handle from Configurator / test tool
+    if (userId == 0x58424F58 || type == 99) {
+        g_virtual_pad_open = 1;
+        log_event(LOG_LEVEL_INFO, "Pure Xbox virtual pad handle %d opened (user=0x%X, type=%d)",
+                  XBOX_VIRTUAL_PAD_HANDLE, userId, type);
+        return XBOX_VIRTUAL_PAD_HANDLE;
+    }
+
     refresh_user_service_state();
     PluginMode eff = g_effective_mode;
 
@@ -1500,7 +1508,7 @@ int32_t scePadRead_hook(int32_t handle, OrbisPadData* pData, int32_t num) {
         }
 
         OrbisPadData xbox_pad;
-        int has_data = (eff == PLUGIN_MODE_SECONDARY) ? get_xbox_translated_pad(&xbox_pad) : 0;
+        int has_data = get_xbox_translated_pad(&xbox_pad);
         uint64_t now_us = sceKernelGetProcessTime();
 
         for (int i = 0; i < num; i++) {
@@ -1632,7 +1640,7 @@ int32_t scePadReadState_hook(int32_t handle, OrbisPadData* pData) {
         }
 
         OrbisPadData xbox_pad;
-        int has_data = (eff == PLUGIN_MODE_SECONDARY) ? get_xbox_translated_pad(&xbox_pad) : 0;
+        int has_data = get_xbox_translated_pad(&xbox_pad);
         if (has_data) {
             *pData = xbox_pad;
             pData->timestamp = sceKernelGetProcessTime();
@@ -1962,14 +1970,23 @@ int hooks_install(void) {
             return -1;
         }
 
+        if (addr_scePadOpen != 0) {
+            safe_install_detour32(&Detour_scePadOpen, "scePadOpen", addr_scePadOpen, (void*)&scePadOpen_hook);
+        }
+        if (addr_scePadClose != 0) {
+            safe_install_detour32(&Detour_scePadClose, "scePadClose", addr_scePadClose, (void*)&scePadClose_hook);
+        }
+
         if (addr_scePadGetControllerInformation != 0) {
             safe_install_detour32(&Detour_scePadGetControllerInformation, "scePadGetControllerInformation",
                                   addr_scePadGetControllerInformation, (void*)&scePadGetControllerInformation_hook);
         }
 
-        g_hooked_scePadSetVibration = safe_hook_optional(
-            &Detour_scePadSetVibration, "scePadSetVibration",
-            addr_scePadSetVibration, (void*)&scePadSetVibration_hook);
+        if (addr_scePadSetVibration != 0) {
+            g_hooked_scePadSetVibration = (safe_install_detour32(
+                &Detour_scePadSetVibration, "scePadSetVibration",
+                addr_scePadSetVibration, (void*)&scePadSetVibration_hook) == 0);
+        }
 
         g_hooks_installed = 1;
         log_event(LOG_LEVEL_INFO, "Homebrew pad hooks installed successfully (pid=%d, MERGE mode)", g_my_pid);
@@ -2027,10 +2044,12 @@ int hooks_install(void) {
                               (void*)&sceUserServiceGetLoginUserIdList_hook);
     }
 
-    // Install additional pad hooks ONLY if prologue disassembly is verified safe (Passo 6)
-    g_hooked_scePadSetVibration = safe_hook_optional(
-        &Detour_scePadSetVibration, "scePadSetVibration",
-        addr_scePadSetVibration, (void*)&scePadSetVibration_hook);
+    // Install additional pad hooks (Detour32 with safe +-2GB trampoline)
+    if (addr_scePadSetVibration != 0) {
+        g_hooked_scePadSetVibration = (safe_install_detour32(
+            &Detour_scePadSetVibration, "scePadSetVibration",
+            addr_scePadSetVibration, (void*)&scePadSetVibration_hook) == 0);
+    }
     g_hooked_scePadGetHandle = safe_hook_optional(
         &Detour_scePadGetHandle, "scePadGetHandle",
         addr_scePadGetHandle, (void*)&scePadGetHandle_hook);
@@ -2072,6 +2091,8 @@ void hooks_remove(void) {
         if (g_hooks_installed) {
             UNHOOK(scePadRead);
             UNHOOK(scePadReadState);
+            UNHOOK(scePadOpen);
+            UNHOOK(scePadClose);
             UNHOOK(scePadGetControllerInformation);
             if (g_hooked_scePadSetVibration) {
                 UNHOOK(scePadSetVibration);

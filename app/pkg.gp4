@@ -38,6 +38,8 @@
 		<file targ_path="assets/icons/btn_arrows.png" orig_path="assets/icons/btn_arrows.png" />
 		<file targ_path="assets/icons/btn_cross_blue.png" orig_path="assets/icons/btn_cross_blue.png" />
 		<file targ_path="assets/icons/btn_options.png" orig_path="assets/icons/btn_options.png" />
+		<file targ_path="assets/icons/btn_square.png" orig_path="assets/icons/btn_square.png" />
+		<file targ_path="assets/icons/btn_triangle.png" orig_path="assets/icons/btn_triangle.png" />
 		<file targ_path="assets/icons/btn_l1.png" orig_path="assets/icons/btn_l1.png" />
 		<file targ_path="assets/icons/btn_r1.png" orig_path="assets/icons/btn_r1.png" />
 	</files>
