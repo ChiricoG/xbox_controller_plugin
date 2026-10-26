@@ -20,12 +20,10 @@ An optional companion homebrew application (`.pkg`) is included for users who pr
 > **Note:** The configurator application is **completely optional**. The plugin works out of the box on its own without it, and settings can also be edited manually via `/data/GoldHEN/xbox_controller.ini`.
 
 <p align="center">
-  <img src="docs/images/xmb_preview.jpg" width="48%" alt="XMB Dashboard Preview" />
-  <img src="docs/images/app_settings.jpg" width="48%" alt="Configurator Settings" />
-</p>
-<p align="center">
-  <img src="docs/images/input_tester.jpg" width="48%" alt="Live Input Tester & Calibration" />
-  <img src="docs/images/save_notification.jpg" width="48%" alt="Save Notification" />
+  <img src="docs/images/xmb_preview.jpg" alt="XMB Dashboard Preview" />
+  <img src="docs/images/app_settings.jpg" alt="Configurator Settings" />
+  <img src="docs/images/input_tester.jpg" alt="Live Input Tester & Calibration" />
+  <img src="docs/images/save_notification.jpg" alt="Save Notification" />
 </p>
 
 ### Configurator Features:
