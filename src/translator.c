@@ -4,6 +4,7 @@
  */
 
 #include "translator.h"
+#include "ini_parser.h"
 #include <string.h>
 #include <orbis/libkernel.h>
 
@@ -13,12 +14,17 @@
 void translator_init(TranslatorConfig* config) {
     if (!config) return;
 
-    config->stick_deadzone = DEFAULT_STICK_DEADZONE;
-    config->trigger_threshold = DEFAULT_TRIGGER_THRESHOLD;
+    config->stick_deadzone = (g_config.stick_deadzone > 0) ? g_config.stick_deadzone : DEFAULT_STICK_DEADZONE;
+    config->trigger_threshold = (g_config.trigger_threshold > 0) ? g_config.trigger_threshold : DEFAULT_TRIGGER_THRESHOLD;
     config->invert_left_y = 1;      // PS4 Y-axis is inverted from Xbox
     config->invert_right_y = 1;
-    config->swap_ab = 0;
-    config->swap_xy = 0;
+    if (!g_config.switch_positional) {
+        config->swap_ab = 1;        // Map Nintendo letter A->Circle, B->Cross
+        config->swap_xy = 1;
+    } else {
+        config->swap_ab = 0;
+        config->swap_xy = 0;
+    }
 }
 
 /*
@@ -106,8 +112,13 @@ void translator_convert(const Xbox360Report* xbox, OrbisPadData* ds4, const Tran
     // ANALOG TRIGGERS (using OpenOrbis 'analog' struct)
     // ========================================
 
-    ds4->analogButtons.l2 = xbox->left_trigger;
-    ds4->analogButtons.r2 = xbox->right_trigger;
+    if (g_config.swap_triggers_bumpers) {
+        ds4->analogButtons.l2 = (xbox_buttons & XBOX360_BTN_LB) ? 255 : 0;
+        ds4->analogButtons.r2 = (xbox_buttons & XBOX360_BTN_RB) ? 255 : 0;
+    } else {
+        ds4->analogButtons.l2 = xbox->left_trigger;
+        ds4->analogButtons.r2 = xbox->right_trigger;
+    }
 
     // ========================================
     // DIGITAL BUTTONS
@@ -132,16 +143,25 @@ void translator_convert(const Xbox360Report* xbox, OrbisPadData* ds4, const Tran
         if (xbox_buttons & XBOX360_BTN_Y) ds4_buttons |= DS4_BUTTON_TRIANGLE;
     }
 
-    // Shoulder buttons
-    if (xbox_buttons & XBOX360_BTN_LB) ds4_buttons |= DS4_BUTTON_L1;
-    if (xbox_buttons & XBOX360_BTN_RB) ds4_buttons |= DS4_BUTTON_R1;
-
-    // Digital trigger buttons
-    if (xbox->left_trigger >= config->trigger_threshold) {
-        ds4_buttons |= DS4_BUTTON_L2;
-    }
-    if (xbox->right_trigger >= config->trigger_threshold) {
-        ds4_buttons |= DS4_BUTTON_R2;
+    // Shoulder buttons & digital triggers
+    if (g_config.swap_triggers_bumpers) {
+        if (xbox_buttons & XBOX360_BTN_LB) ds4_buttons |= DS4_BUTTON_L2;
+        if (xbox_buttons & XBOX360_BTN_RB) ds4_buttons |= DS4_BUTTON_R2;
+        if (xbox->left_trigger >= config->trigger_threshold) {
+            ds4_buttons |= DS4_BUTTON_L1;
+        }
+        if (xbox->right_trigger >= config->trigger_threshold) {
+            ds4_buttons |= DS4_BUTTON_R1;
+        }
+    } else {
+        if (xbox_buttons & XBOX360_BTN_LB) ds4_buttons |= DS4_BUTTON_L1;
+        if (xbox_buttons & XBOX360_BTN_RB) ds4_buttons |= DS4_BUTTON_R1;
+        if (xbox->left_trigger >= config->trigger_threshold) {
+            ds4_buttons |= DS4_BUTTON_L2;
+        }
+        if (xbox->right_trigger >= config->trigger_threshold) {
+            ds4_buttons |= DS4_BUTTON_R2;
+        }
     }
 
     // Stick click buttons
@@ -152,8 +172,14 @@ void translator_convert(const Xbox360Report* xbox, OrbisPadData* ds4, const Tran
     if (xbox_buttons & XBOX360_BTN_START) ds4_buttons |= DS4_BUTTON_OPTIONS;
     if (xbox_buttons & XBOX360_BTN_BACK)  ds4_buttons |= DS4_BUTTON_SHARE;
 
-    // Guide button -> Touchpad Click (immediate map/inventory access in games)
-    if (xbox_buttons & XBOX360_BTN_GUIDE) ds4_buttons |= DS4_BUTTON_TOUCHPAD;
+    // Guide button action
+    if (xbox_buttons & XBOX360_BTN_GUIDE) {
+        if (g_config.guide_action == CONFIG_GUIDE_TOUCHPAD) {
+            ds4_buttons |= DS4_BUTTON_TOUCHPAD;
+        } else if (g_config.guide_action == CONFIG_GUIDE_SHARE) {
+            ds4_buttons |= DS4_BUTTON_SHARE;
+        }
+    }
 
     // ========================================
     // D-PAD
@@ -248,8 +274,16 @@ void translator_convert_xboxone(const XboxOneReport* xbox, OrbisPadData* ds4, co
     // ANALOG TRIGGERS (Xbox One uses 10-bit, convert to 8-bit)
     // ========================================
 
-    ds4->analogButtons.l2 = xboxone_trigger_to_8bit(xbox->left_trigger);
-    ds4->analogButtons.r2 = xboxone_trigger_to_8bit(xbox->right_trigger);
+    uint8_t lt = xboxone_trigger_to_8bit(xbox->left_trigger);
+    uint8_t rt = xboxone_trigger_to_8bit(xbox->right_trigger);
+
+    if (g_config.swap_triggers_bumpers) {
+        ds4->analogButtons.l2 = (xbox->buttons_high & XBOXONE_LB) ? 255 : 0;
+        ds4->analogButtons.r2 = (xbox->buttons_high & XBOXONE_RB) ? 255 : 0;
+    } else {
+        ds4->analogButtons.l2 = lt;
+        ds4->analogButtons.r2 = rt;
+    }
 
     // ========================================
     // DIGITAL BUTTONS
@@ -274,18 +308,25 @@ void translator_convert_xboxone(const XboxOneReport* xbox, OrbisPadData* ds4, co
         if (xbox->buttons_low & XBOXONE_Y) ds4_buttons |= DS4_BUTTON_TRIANGLE;
     }
 
-    // Shoulder buttons (in buttons_high)
-    if (xbox->buttons_high & XBOXONE_LB) ds4_buttons |= DS4_BUTTON_L1;
-    if (xbox->buttons_high & XBOXONE_RB) ds4_buttons |= DS4_BUTTON_R1;
-
-    // Digital trigger buttons (use 8-bit converted value)
-    uint8_t lt = xboxone_trigger_to_8bit(xbox->left_trigger);
-    uint8_t rt = xboxone_trigger_to_8bit(xbox->right_trigger);
-    if (lt >= config->trigger_threshold) {
-        ds4_buttons |= DS4_BUTTON_L2;
-    }
-    if (rt >= config->trigger_threshold) {
-        ds4_buttons |= DS4_BUTTON_R2;
+    // Shoulder buttons & digital triggers
+    if (g_config.swap_triggers_bumpers) {
+        if (xbox->buttons_high & XBOXONE_LB) ds4_buttons |= DS4_BUTTON_L2;
+        if (xbox->buttons_high & XBOXONE_RB) ds4_buttons |= DS4_BUTTON_R2;
+        if (lt >= config->trigger_threshold) {
+            ds4_buttons |= DS4_BUTTON_L1;
+        }
+        if (rt >= config->trigger_threshold) {
+            ds4_buttons |= DS4_BUTTON_R1;
+        }
+    } else {
+        if (xbox->buttons_high & XBOXONE_LB) ds4_buttons |= DS4_BUTTON_L1;
+        if (xbox->buttons_high & XBOXONE_RB) ds4_buttons |= DS4_BUTTON_R1;
+        if (lt >= config->trigger_threshold) {
+            ds4_buttons |= DS4_BUTTON_L2;
+        }
+        if (rt >= config->trigger_threshold) {
+            ds4_buttons |= DS4_BUTTON_R2;
+        }
     }
 
     // Stick click buttons (in buttons_high)
@@ -420,9 +461,13 @@ void translator_convert_switch(const SwitchInputOnlyReport* sw, OrbisPadData* ds
     // ANALOG TRIGGERS (Switch has digital only, fake analog)
     // ========================================
 
-    // ZL/ZR are digital on Switch, output full press or nothing
-    ds4->analogButtons.l2 = (sw->buttons0 & SWITCH_BTN_ZL) ? 255 : 0;
-    ds4->analogButtons.r2 = (sw->buttons0 & SWITCH_BTN_ZR) ? 255 : 0;
+    if (g_config.swap_triggers_bumpers) {
+        ds4->analogButtons.l2 = (sw->buttons0 & SWITCH_BTN_L) ? 255 : 0;
+        ds4->analogButtons.r2 = (sw->buttons0 & SWITCH_BTN_R) ? 255 : 0;
+    } else {
+        ds4->analogButtons.l2 = (sw->buttons0 & SWITCH_BTN_ZL) ? 255 : 0;
+        ds4->analogButtons.r2 = (sw->buttons0 & SWITCH_BTN_ZR) ? 255 : 0;
+    }
 
     // ========================================
     // DIGITAL BUTTONS
@@ -448,13 +493,18 @@ void translator_convert_switch(const SwitchInputOnlyReport* sw, OrbisPadData* ds
         if (sw->buttons0 & SWITCH_BTN_Y) ds4_buttons |= DS4_BUTTON_SQUARE;
     }
 
-    // Shoulder buttons
-    if (sw->buttons0 & SWITCH_BTN_L) ds4_buttons |= DS4_BUTTON_L1;
-    if (sw->buttons0 & SWITCH_BTN_R) ds4_buttons |= DS4_BUTTON_R1;
-
-    // Digital trigger buttons
-    if (sw->buttons0 & SWITCH_BTN_ZL) ds4_buttons |= DS4_BUTTON_L2;
-    if (sw->buttons0 & SWITCH_BTN_ZR) ds4_buttons |= DS4_BUTTON_R2;
+    // Shoulder buttons & digital triggers
+    if (g_config.swap_triggers_bumpers) {
+        if (sw->buttons0 & SWITCH_BTN_L)  ds4_buttons |= DS4_BUTTON_L2;
+        if (sw->buttons0 & SWITCH_BTN_R)  ds4_buttons |= DS4_BUTTON_R2;
+        if (sw->buttons0 & SWITCH_BTN_ZL) ds4_buttons |= DS4_BUTTON_L1;
+        if (sw->buttons0 & SWITCH_BTN_ZR) ds4_buttons |= DS4_BUTTON_R1;
+    } else {
+        if (sw->buttons0 & SWITCH_BTN_L)  ds4_buttons |= DS4_BUTTON_L1;
+        if (sw->buttons0 & SWITCH_BTN_R)  ds4_buttons |= DS4_BUTTON_R1;
+        if (sw->buttons0 & SWITCH_BTN_ZL) ds4_buttons |= DS4_BUTTON_L2;
+        if (sw->buttons0 & SWITCH_BTN_ZR) ds4_buttons |= DS4_BUTTON_R2;
+    }
 
     // Stick click buttons (byte 1)
     if (sw->buttons1 & SWITCH_BTN_L3) ds4_buttons |= DS4_BUTTON_L3;
@@ -464,8 +514,14 @@ void translator_convert_switch(const SwitchInputOnlyReport* sw, OrbisPadData* ds
     if (sw->buttons1 & SWITCH_BTN_PLUS)  ds4_buttons |= DS4_BUTTON_OPTIONS;
     if (sw->buttons1 & SWITCH_BTN_MINUS) ds4_buttons |= DS4_BUTTON_SHARE;
 
-    // Home button -> Touchpad Click (immediate map/inventory access in games)
-    if (sw->buttons1 & SWITCH_BTN_HOME) ds4_buttons |= DS4_BUTTON_TOUCHPAD;
+    // Home button action
+    if (sw->buttons1 & SWITCH_BTN_HOME) {
+        if (g_config.guide_action == CONFIG_GUIDE_TOUCHPAD) {
+            ds4_buttons |= DS4_BUTTON_TOUCHPAD;
+        } else if (g_config.guide_action == CONFIG_GUIDE_SHARE) {
+            ds4_buttons |= DS4_BUTTON_SHARE;
+        }
+    }
 
     // ========================================
     // D-PAD

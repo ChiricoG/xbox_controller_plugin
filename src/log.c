@@ -9,6 +9,7 @@
  */
 
 #include "log.h"
+#include "ini_parser.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -83,6 +84,10 @@ static void send_os_notification(const char* message) {
 }
 
 static void try_send_notification(const char* message, uint64_t now_us) {
+    if (!g_config.enable_notifications) {
+        return; // Notifications silenced via xbox_controller.ini
+    }
+
     if (g_last_notify_time_us != 0 &&
         (now_us - g_last_notify_time_us < NOTIFY_GLOBAL_MIN_INTERVAL_US)) {
         return; // Global rate limit

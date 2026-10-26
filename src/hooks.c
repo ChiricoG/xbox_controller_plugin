@@ -14,6 +14,7 @@
 
 #include "hooks.h"
 #include "config.h"
+#include "ini_parser.h"
 #include "translator.h"
 #include "xbox360.h"
 #include "xboxone.h"
@@ -185,8 +186,8 @@ static sceUsbdInterruptTransfer_t         p_sceUsbdInterruptTransfer = NULL;
 static sceUsbdCheckConnected_t            p_sceUsbdCheckConnected = NULL;
 
 // libScePad types & pointers
-typedef int32_t (*scePadReadExt_t)(int32_t, OrbisPadData*, int32_t);
-typedef int32_t (*scePadReadStateExt_t)(int32_t, OrbisPadData*);
+typedef int32_t (*scePadReadExt_t)(int32_t, OrbisPadData*, int32_t, int32_t);
+typedef int32_t (*scePadReadStateExt_t)(int32_t, OrbisPadData*, int32_t);
 typedef int32_t (*scePadRead_t)(int32_t, OrbisPadData*, int32_t);
 typedef int32_t (*scePadReadState_t)(int32_t, OrbisPadData*);
 typedef int32_t (*scePadOpen_t)(int32_t, int32_t, int32_t, void*);
@@ -300,9 +301,12 @@ static void unregister_open_handle(int32_t handle) {
 // Dynamic Module & IPC Helpers
 // ============================================
 
-void hooks_set_process_info(int pid, int is_shellui) {
+static int                 g_is_homebrew = 0;
+
+void hooks_set_process_info(int pid, int is_shellui, int is_homebrew) {
     g_my_pid = pid;
     g_is_shellui = is_shellui;
+    g_is_homebrew = is_homebrew;
 }
 
 static int load_sys_prx(const char* libname, int* out_handle) {
@@ -347,15 +351,18 @@ static void open_ipc_file(void) {
     }
 
     // 2. Sandboxed process fallback: jailbreak to escape sandbox and access /data/GoldHEN
-    struct jailbreak_backup jb;
-    memset(&jb, 0, sizeof(jb));
-    if (sys_sdk_jailbreak(&jb) == 0) {
-        fd = sceKernelOpen("/data/GoldHEN/xbox_ipc.bin", O_CREAT | O_RDWR, 0666);
-        sys_sdk_unjailbreak(&jb);
-        if (fd >= 0) {
-            g_ipc_fd = fd;
-            log_event(LOG_LEVEL_INFO, "IPC file opened via sandbox escape at /data/GoldHEN/xbox_ipc.bin (fd=%d)", fd);
-            return;
+    // Homebrew processes already have direct filesystem access and must NEVER be unjailed.
+    if (!g_is_homebrew) {
+        struct jailbreak_backup jb;
+        memset(&jb, 0, sizeof(jb));
+        if (sys_sdk_jailbreak(&jb) == 0) {
+            fd = sceKernelOpen("/data/GoldHEN/xbox_ipc.bin", O_CREAT | O_RDWR, 0666);
+            sys_sdk_unjailbreak(&jb);
+            if (fd >= 0) {
+                g_ipc_fd = fd;
+                log_event(LOG_LEVEL_INFO, "IPC file opened via sandbox escape at /data/GoldHEN/xbox_ipc.bin (fd=%d)", fd);
+                return;
+            }
         }
     }
 
@@ -580,6 +587,7 @@ static void cycle_mode(void) {
 
 // Send rumble to connected controller (Passo 9)
 static void send_rumble_packet(uint8_t large, uint8_t small) {
+    if (!g_config.enable_rumble) return;
     if (g_xbox_handle == NULL || g_ep_out == 0 || p_sceUsbdInterruptTransfer == NULL) return;
 
     int32_t transferred = 0;
@@ -789,8 +797,8 @@ static int scan_and_open(void) {
 static void process_special_buttons(OrbisPadData* pData, uint64_t now_us) {
     uint32_t buttons = pData->buttons;
 
-    // Check mode switch combo (LB + RB + Back + Start held ~1.5s)
-    int combo_pressed = ((buttons & COMBO_MASK) == COMBO_MASK);
+    // Check mode switch combo (LB + RB + Back + Start held ~1.5s) if enabled
+    int combo_pressed = g_config.enable_mode_combo && ((buttons & COMBO_MASK) == COMBO_MASK);
     if (combo_pressed) {
         if (g_combo_start_us == 0) {
             g_combo_start_us = now_us;
@@ -863,7 +871,11 @@ static void update_translated_pad_in_poll_thread(void) {
     }
 
     if (g_shared.guide) {
-        translated.buttons |= DS4_BUTTON_TOUCHPAD;
+        if (g_config.guide_action == CONFIG_GUIDE_TOUCHPAD) {
+            translated.buttons |= DS4_BUTTON_TOUCHPAD;
+        } else if (g_config.guide_action == CONFIG_GUIDE_SHARE) {
+            translated.buttons |= DS4_BUTTON_SHARE;
+        }
     }
 
     uint64_t now_us = sceKernelGetProcessTime();
@@ -907,6 +919,10 @@ static int poll_remote_ipc_master(uint64_t now_us, int* out_handoff_pending) {
         return 0;
     }
 
+    if (m.pad.timestamp != 0 && now_us > m.pad.timestamp && (now_us - m.pad.timestamp) >= XBOX_IPC_TIMEOUT_US) {
+        return 0;
+    }
+
     // Remote USB Master is actively updating IPC!
     xbox_spin_lock();
     g_shared.connected = m.connected;
@@ -919,7 +935,7 @@ static int poll_remote_ipc_master(uint64_t now_us, int* out_handoff_pending) {
     g_shared.rumble_dirty = 0;
     xbox_spin_unlock();
 
-    if ((PluginMode)m.mode != g_mode) {
+    if (!g_is_homebrew && (PluginMode)m.mode != g_mode) {
         g_mode = (PluginMode)m.mode;
         update_effective_mode_cached();
     }
@@ -1220,6 +1236,22 @@ static void merge_xbox_into_ds4(OrbisPadData* ds4, const OrbisPadData* xbox) {
 int hooks_init_usb(void) {
     if (g_usb_initialized) return 0;
 
+    // In homebrew, operate purely in MERGE (Player 1) mode
+    if (g_is_homebrew) {
+        g_mode = PLUGIN_MODE_MERGE;
+        g_effective_mode = PLUGIN_MODE_MERGE;
+    } else {
+        // Apply configured initial mode (auto, merge, secondary)
+        if (g_config.mode == CONFIG_MODE_MERGE) {
+            g_mode = PLUGIN_MODE_MERGE;
+        } else if (g_config.mode == CONFIG_MODE_SECONDARY) {
+            g_mode = PLUGIN_MODE_SECONDARY;
+        } else {
+            g_mode = PLUGIN_MODE_AUTO;
+        }
+        update_effective_mode_cached();
+    }
+
     g_shared_lock = 0;
     memset(&g_shared, 0, sizeof(g_shared));
 
@@ -1351,21 +1383,33 @@ int32_t scePadGetControllerInformation_hook(int32_t handle, OrbisPadInformation*
     }
 
     int32_t ret = HOOK_CONTINUE(scePadGetControllerInformation, scePadGetControllerInformation_t, handle, info);
-    if (ret == 0 && info != NULL && g_shared.connected) {
-        if (info->connected != 0 && handle != g_fallback_p2_handle) {
+    if (info != NULL) {
+        if (ret == 0 && info->connected != 0 && handle != g_fallback_p2_handle) {
             g_known_p1_handle = handle;
         }
-        PluginMode eff = g_effective_mode;
-        if (eff == PLUGIN_MODE_MERGE && (g_known_p1_handle == 0 || handle == g_known_p1_handle)) {
-            if (g_known_p1_handle == 0) {
-                g_known_p1_handle = handle;
+        if (g_shared.connected) {
+            PluginMode eff = g_effective_mode;
+            if (eff == PLUGIN_MODE_MERGE || g_is_homebrew) {
+                if (g_known_p1_handle == 0 || handle == g_known_p1_handle) {
+                    if (g_known_p1_handle == 0) {
+                        g_known_p1_handle = handle;
+                    }
+                    info->connected = 1;
+                    if (info->count == 0) info->count = 1;
+                    if (ret != 0) {
+                        info->connectionType = ORBIS_PAD_CONNECTION_TYPE_STANDARD;
+                        info->deviceClass = ORBIS_PAD_DEVICE_CLASS_PAD;
+                        info->touchpadDensity = 1.0f;
+                        info->touchResolutionX = 1920;
+                        info->touchResolutionY = 943;
+                        ret = 0;
+                    }
+                }
+            } else if (eff == PLUGIN_MODE_SECONDARY && !g_virtual_pad_open &&
+                       handle == g_fallback_p2_handle && g_fallback_p2_handle > 0) {
+                info->connected = 1;
+                if (info->count == 0) info->count = 1;
             }
-            info->connected = 1;
-            if (info->count == 0) info->count = 1;
-        } else if (eff == PLUGIN_MODE_SECONDARY && !g_virtual_pad_open &&
-                   handle == g_fallback_p2_handle && g_fallback_p2_handle > 0) {
-            info->connected = 1;
-            if (info->count == 0) info->count = 1;
         }
     }
     return ret;
@@ -1401,7 +1445,7 @@ int32_t scePadSetMotionSensorState_hook(int32_t handle, int32_t enable) {
 }
 
 int32_t scePadSetVibration_hook(int32_t handle, const OrbisPadVibeParam *param) {
-    if (param != NULL && g_shared.connected) {
+    if (param != NULL && g_shared.connected && g_config.enable_rumble) {
         xbox_spin_lock();
         if (g_shared.rumble_large != param->lgMotor || g_shared.rumble_small != param->smMotor) {
             g_shared.rumble_large = param->lgMotor;
@@ -1480,8 +1524,43 @@ int32_t scePadRead_hook(int32_t handle, OrbisPadData* pData, int32_t num) {
     }
 
     // Real handle read
-    int32_t ret = p_scePadReadExt(handle, pData, num);
-    if (pData == NULL || num <= 0 || ret < 0) {
+    int32_t ret = p_scePadReadExt(handle, pData, num, 0);
+    if (pData == NULL || num <= 0) {
+        return ret;
+    }
+
+    OrbisPadData xbox_pad;
+    int has_xbox = get_xbox_translated_pad(&xbox_pad);
+
+    if (g_is_homebrew) {
+        if (ret > 0) {
+            for (int i = 0; i < ret && i < num; i++) {
+                pData[i].buttons &= ~ORBIS_PAD_BUTTON_INTERCEPTED;
+                if (has_xbox) {
+                    if (pData[i].connected != 0) {
+                        merge_xbox_into_ds4(&pData[i], &xbox_pad);
+                    } else {
+                        pData[i] = xbox_pad;
+                        pData[i].timestamp = sceKernelGetProcessTime();
+                        pData[i].connected = 1;
+                        pData[i].count = 1;
+                    }
+                }
+            }
+            return ret;
+        } else if (has_xbox) {
+            pData[0] = xbox_pad;
+            pData[0].timestamp = sceKernelGetProcessTime();
+            pData[0].connected = 1;
+            pData[0].count = 1;
+            pData[0].buttons &= ~ORBIS_PAD_BUTTON_INTERCEPTED;
+            g_known_p1_handle = handle;
+            return 1;
+        }
+        return ret;
+    }
+
+    if (ret < 0) {
         return ret;
     }
 
@@ -1492,8 +1571,7 @@ int32_t scePadRead_hook(int32_t handle, OrbisPadData* pData, int32_t num) {
         }
     }
 
-    OrbisPadData xbox_pad;
-    if (!get_xbox_translated_pad(&xbox_pad)) {
+    if (!has_xbox) {
         return ret;
     }
 
@@ -1574,8 +1652,41 @@ int32_t scePadReadState_hook(int32_t handle, OrbisPadData* pData) {
     }
 
     // Real handle read
-    int32_t ret = p_scePadReadStateExt(handle, pData);
-    if (pData == NULL || ret != 0) {
+    int32_t ret = p_scePadReadStateExt(handle, pData, 0);
+    if (pData == NULL) {
+        return ret;
+    }
+
+    OrbisPadData xbox_pad;
+    int has_xbox = get_xbox_translated_pad(&xbox_pad);
+
+    if (g_is_homebrew) {
+        if (ret == 0) {
+            pData->buttons &= ~ORBIS_PAD_BUTTON_INTERCEPTED;
+            if (has_xbox) {
+                if (pData->connected != 0) {
+                    merge_xbox_into_ds4(pData, &xbox_pad);
+                } else {
+                    *pData = xbox_pad;
+                    pData->timestamp = sceKernelGetProcessTime();
+                    pData->connected = 1;
+                    pData->count = 1;
+                }
+            }
+            return 0;
+        } else if (has_xbox) {
+            *pData = xbox_pad;
+            pData->timestamp = sceKernelGetProcessTime();
+            pData->connected = 1;
+            pData->count = 1;
+            pData->buttons &= ~ORBIS_PAD_BUTTON_INTERCEPTED;
+            g_known_p1_handle = handle;
+            return 0;
+        }
+        return ret;
+    }
+
+    if (ret != 0) {
         return ret;
     }
 
@@ -1589,8 +1700,7 @@ int32_t scePadReadState_hook(int32_t handle, OrbisPadData* pData) {
         return ret;
     }
 
-    OrbisPadData xbox_pad;
-    if (!get_xbox_translated_pad(&xbox_pad)) {
+    if (!has_xbox) {
         return ret;
     }
 
@@ -1811,8 +1921,73 @@ int hooks_install(void) {
     sys_dynlib_dlsym(pad_h, "scePadResetLightBar", (void**)&addr_scePadResetLightBar);
     sys_dynlib_dlsym(pad_h, "scePadSetMotionSensorState", (void**)&addr_scePadSetMotionSensorState);
 
-    if (p_scePadReadExt == NULL || p_scePadReadStateExt == NULL ||
-        addr_scePadRead == 0 || addr_scePadReadState == 0 ||
+    if (p_scePadReadExt == NULL || p_scePadReadStateExt == NULL) {
+        log_event(LOG_LEVEL_ERROR, "p_scePadReadExt or p_scePadReadStateExt symbol missing");
+        return -1;
+    }
+
+    // Prologue patchers (xor ecx, ecx / xor edx, edx) installed for both homebrew and retail
+    if (!g_padReadExtPatcher) {
+        g_padReadExtPatcher = (Patcher*)malloc(sizeof(Patcher));
+        if (g_padReadExtPatcher) {
+            Patcher_Construct(g_padReadExtPatcher);
+            uint8_t xor_ecx_ecx[5] = {0x31, 0xC9, 0x90, 0x90, 0x90};
+            Patcher_Install_Patch(g_padReadExtPatcher, (uint64_t)p_scePadReadExt, xor_ecx_ecx, sizeof(xor_ecx_ecx));
+        }
+    }
+
+    if (!g_padReadStateExtPatcher) {
+        g_padReadStateExtPatcher = (Patcher*)malloc(sizeof(Patcher));
+        if (g_padReadStateExtPatcher) {
+            Patcher_Construct(g_padReadStateExtPatcher);
+            uint8_t xor_edx_edx[5] = {0x31, 0xD2, 0x90, 0x90, 0x90};
+            Patcher_Install_Patch(g_padReadStateExtPatcher, (uint64_t)p_scePadReadStateExt, xor_edx_edx, sizeof(xor_edx_edx));
+        }
+    }
+
+    if (g_is_homebrew) {
+        log_event(LOG_LEVEL_INFO, "Installing lightweight Homebrew hooks (MERGE only)...");
+        log_flush();
+
+        if (addr_scePadRead == 0 || addr_scePadReadState == 0) {
+            log_event(LOG_LEVEL_ERROR, "Required pad read symbols missing in homebrew");
+            log_flush();
+            return -1;
+        }
+
+        if (safe_install_detour32(&Detour_scePadRead, "scePadRead", addr_scePadRead, (void*)&scePadRead_hook) < 0 ||
+            safe_install_detour32(&Detour_scePadReadState, "scePadReadState", addr_scePadReadState, (void*)&scePadReadState_hook) < 0) {
+            log_event(LOG_LEVEL_ERROR, "Homebrew pad read detours failed");
+            log_flush();
+            return -1;
+        }
+
+        if (addr_scePadGetControllerInformation != 0) {
+            safe_install_detour32(&Detour_scePadGetControllerInformation, "scePadGetControllerInformation",
+                                  addr_scePadGetControllerInformation, (void*)&scePadGetControllerInformation_hook);
+        }
+
+        g_hooked_scePadSetVibration = safe_hook_optional(
+            &Detour_scePadSetVibration, "scePadSetVibration",
+            addr_scePadSetVibration, (void*)&scePadSetVibration_hook);
+
+        g_hooks_installed = 1;
+        log_event(LOG_LEVEL_INFO, "Homebrew pad hooks installed successfully (pid=%d, MERGE mode)", g_my_pid);
+        log_flush();
+
+        // Start background polling thread
+        if ((g_usb_initialized || g_ipc_fd >= 0) && !g_poll_running) {
+            g_poll_running = 1;
+            if (scePthreadCreate(&g_poll_thread, NULL, usb_poll_thread, NULL, "xbox_usb_poll") != 0) {
+                g_poll_running = 0;
+                log_event(LOG_LEVEL_ERROR, "Failed to create USB poll thread in homebrew");
+                log_flush();
+            }
+        }
+        return 0;
+    }
+
+    if (addr_scePadRead == 0 || addr_scePadReadState == 0 ||
         addr_scePadOpen == 0 || addr_scePadClose == 0 ||
         addr_scePadGetControllerInformation == 0) {
         log_event(LOG_LEVEL_ERROR, "Required libScePad symbols missing");
@@ -1833,20 +2008,6 @@ int hooks_install(void) {
     }
 
 
-    // Prologue patchers (xor ecx, ecx / xor edx, edx)
-    g_padReadExtPatcher = (Patcher*)malloc(sizeof(Patcher));
-    if (g_padReadExtPatcher) {
-        Patcher_Construct(g_padReadExtPatcher);
-        uint8_t xor_ecx_ecx[5] = {0x31, 0xC9, 0x90, 0x90, 0x90};
-        Patcher_Install_Patch(g_padReadExtPatcher, (uint64_t)p_scePadReadExt, xor_ecx_ecx, sizeof(xor_ecx_ecx));
-    }
-
-    g_padReadStateExtPatcher = (Patcher*)malloc(sizeof(Patcher));
-    if (g_padReadStateExtPatcher) {
-        Patcher_Construct(g_padReadStateExtPatcher);
-        uint8_t xor_edx_edx[5] = {0x31, 0xD2, 0x90, 0x90, 0x90};
-        Patcher_Install_Patch(g_padReadStateExtPatcher, (uint64_t)p_scePadReadStateExt, xor_edx_edx, sizeof(xor_edx_edx));
-    }
 
     // Install core pad hooks using dynamically resolved addresses & safe +-2GB trampoline verification
     if (safe_install_detour32(&Detour_scePadRead, "scePadRead", addr_scePadRead, (void*)&scePadRead_hook) < 0 ||
@@ -1905,6 +2066,41 @@ void hooks_remove(void) {
     if (g_poll_running) {
         g_poll_running = 0;
         scePthreadJoin(g_poll_thread, NULL);
+    }
+
+    if (g_is_homebrew) {
+        if (g_hooks_installed) {
+            UNHOOK(scePadRead);
+            UNHOOK(scePadReadState);
+            UNHOOK(scePadGetControllerInformation);
+            if (g_hooked_scePadSetVibration) {
+                UNHOOK(scePadSetVibration);
+                g_hooked_scePadSetVibration = 0;
+            }
+            if (g_padReadExtPatcher) {
+                Patcher_Destroy(g_padReadExtPatcher);
+                free(g_padReadExtPatcher);
+                g_padReadExtPatcher = NULL;
+            }
+            if (g_padReadStateExtPatcher) {
+                Patcher_Destroy(g_padReadStateExtPatcher);
+                free(g_padReadStateExtPatcher);
+                g_padReadStateExtPatcher = NULL;
+            }
+            g_hooks_installed = 0;
+        }
+        if (g_usb_initialized) {
+            close_controller_ex(0, 1);
+            if (p_sceUsbdExit != NULL) {
+                p_sceUsbdExit();
+            }
+            g_usb_initialized = 0;
+        }
+        if (g_ipc_fd >= 0) {
+            sceKernelClose(g_ipc_fd);
+            g_ipc_fd = -1;
+        }
+        return;
     }
 
     // 2. Unhook functions

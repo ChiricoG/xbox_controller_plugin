@@ -2,6 +2,43 @@
 
 All notable changes to this project are documented in this file.
 
+## [1.4.1] - 2026-10-26
+
+### Added
+- **Full Homebrew Navigation & Process Classification Engine**:
+  - Implemented advanced multi-tier process classification in `src/main.c`, extending Xbox controller support from retail games (`CUSA`, `PCAS`, `PLAS`) to PS4 Homebrew applications (`HBST*`, `APOL*`, `ITEM*`, `EXPL*`, `XBOX*`, etc.).
+  - Enables full controller navigation inside Apollo Save Tool, Itemzflow, PS4-Explorer, Homebrew Store, GoldHEN Cheats Manager, DiPlay, and the Xbox Controller Configurator.
+  - Resolved `libScePad` internal calling conventions (`scePadReadStateExt`/`scePadReadExt` flags register `flags = 0` and prologue patching) and SDL2 joystick detection via `scePadGetControllerInformation`, allowing seamless simultaneous DualShock 4 and Xbox navigation in `MERGE` mode even if the DualShock 4 is disconnected.
+  - Zero-risk architecture: strictly blacklists system daemons and helper processes (`mini-syscore`, `SceSysCore`, `WebProcess`, `compiler`, `ScePartyDaemon`, `SceShellCore`, `NPXS*`), validating `libScePad` availability before hooking to guarantee 100% system stability.
+  - Added `enable_homebrew` configuration toggle (`1` = enabled by default, `0` = retail games only).
+  - Ensured complete isolation from USB Mass Storage (Class 0x08) so homebrew file managers and PKG installers experience zero drive conflicts.
+- **Xbox Controller Configurator (Optional Companion PS4 Homebrew App)**:
+  - Developed an optional Fake PKG (FPKG) companion application (`UP9000-XBOX00001_00-XBOXCONFIGURATOR`) for PS4 consoles to graphically customize, save, and reload plugin settings directly on TV without requiring PC or FTP text editing. (The app is completely optional; the plugin works normally without it).
+  - Full support for all 10 plugin parameters within a responsive 5-card vertical scrollable viewport with native green scrollbar and position tracking indicator (`1/10` to `10/10`).
+  - Automated first-boot initialization: detects and creates `/data/GoldHEN/xbox_controller.ini` with all default settings if missing, or reads and edits the existing file.
+  - Real-time on-screen toast confirmation banner on saving.
+- **Optional INI Configuration Engine in `xbox_controller.prx`**:
+  - Added optional persistent configuration support via `/data/GoldHEN/xbox_controller.ini`.
+  - Zero-allocation, static-buffer INI parser (`include/ini_parser.h`, `src/config.c`) ensuring zero dynamic heap fragmentation.
+  - 100% backward compatible: if the INI file does not exist, the plugin preserves exact v1.4.0 behavior by default.
+  - Configurable settings:
+    - `mode`: `auto` (default), `merge`, `secondary`
+    - `guide_action`: `touchpad` (default), `share`, `none`
+    - `enable_notifications`: `1` (default) or `0`
+    - `enable_mode_combo`: `1` (default) or `0`
+    - `enable_rumble`: `1` (default) or `0`
+    - `enable_homebrew`: `1` (default) or `0` (controller navigation in homebrew apps)
+    - `stick_deadzone`: configurable inner analog stick deadzone (`0` to `32`, default `15` = ~`12%`)
+    - `trigger_threshold`: configurable digital trigger activation threshold (`0` to `255`, default `30` = ~`12%`)
+    - `swap_triggers_bumpers`: inverts bumper and trigger mappings (`0` default, `1` inverted)
+    - `switch_positional_layout`: swaps A/B and X/Y for Switch positional layouts (`1` default, `0` by letter)
+- **Extended Controller & XInput Compatibility**:
+  - Added explicit support and documentation for all standard XInput controllers in addition to Xbox 360, Xbox One, and Xbox Series X|S.
+- **Demonstration Media & Hardware Verification**:
+  - Updated live PS4 hardware screenshots demonstrating dashboard XMB integration, 10-parameter scrollable configuration editor, save toast notification, and developer information panel.
+
+---
+
 ## [1.4.0] - 2026-10-25
 
 ### Added

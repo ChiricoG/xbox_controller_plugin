@@ -9,7 +9,7 @@
 /*
  * Configure current process identity (from sys_sdk_proc_info)
  */
-void hooks_set_process_info(int pid, int is_shellui);
+void hooks_set_process_info(int pid, int is_shellui, int is_homebrew);
 
 /*
  * Initialize USB & IPC subsystem for Xbox controller

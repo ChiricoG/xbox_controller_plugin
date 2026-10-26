@@ -1,0 +1,42 @@
+# Xbox Controller Plugin - Configuration File
+# Location on PS4: /data/GoldHEN/xbox_controller.ini
+#
+# NOTE: This file is completely OPTIONAL.
+# If this file is missing, the plugin automatically uses all default settings below.
+
+[General]
+# Mode selection: auto, merge, secondary
+# auto = Merge (P1) if 1 user logged in, Secondary (P2) if 2+ users logged in
+mode = auto
+
+# Central Xbox Guide / Home button behavior: touchpad, share, none
+# touchpad = DS4 Touchpad click (opens map/inventory in games)
+guide_action = touchpad
+
+# On-screen GoldHEN notifications: 1 = enabled, 0 = disabled
+enable_notifications = 1
+
+# Runtime mode toggle combo (LB + RB + Back + Start): 1 = enabled, 0 = disabled
+enable_mode_combo = 1
+
+# Vibration / Rumble feedback: 1 = enabled, 0 = disabled
+enable_rumble = 1
+
+# Support controller navigation inside Homebrew apps: 1 = enabled, 0 = disabled
+enable_homebrew = 1
+
+[Deadzone]
+# Analog stick deadzone (0-127). Default: 15 (~12%)
+# Increase if you experience stick drift.
+stick_deadzone = 15
+
+# Digital trigger threshold (0-255). Default: 30
+trigger_threshold = 30
+
+[Remap]
+# Swap bumpers and triggers (LB/RB <-> LT/RT): 1 = enabled, 0 = disabled
+# Useful for FPS titles to shoot with bumpers
+swap_triggers_bumpers = 0
+
+# Nintendo Switch controller layout: 1 = positional (bottom=X), 0 = by letter (A=Circle)
+switch_positional_layout = 1

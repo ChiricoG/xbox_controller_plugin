@@ -1,14 +1,39 @@
 # Xbox Controller Plugin for PS4
 
-A GoldHEN plugin that enables Xbox and Nintendo Switch USB controllers on jailbroken PS4 consoles.
+A GoldHEN plugin and companion homebrew configurator that enables Xbox, XInput, and Nintendo Switch USB controllers on jailbroken PS4 consoles.
 
-## Status: WORKING (Global Game Support: Single Player Merge + Local Multiplayer Secondary)
+## Status: WORKING (Global Game & Homebrew Support: Single Player Merge + Local Multiplayer Secondary)
 
-Xbox and Switch controllers work as:
-- **Global `[default]` Support:** works automatically across all PlayStation 4 games with a single `[default]` entry in `plugins.ini`, while safely bypassing homebrew utilities so they never crash.
+Xbox, XInput, and Switch controllers work as:
+- **Global `[default]` Support:** works automatically across all PlayStation 4 games and Homebrew applications (Apollo Save Tool, Itemzflow, PS4-Explorer, Homebrew Store, Configurator, etc.) with a single `[default]` entry in `plugins.ini`, while safely excluding background system daemons.
 - **Player 1 (Single Player)** in `merge` mode (1 user logged in), usable alongside or in place of the DualShock 4.
 - **Player 2 (Local Multiplayer)** in `secondary` mode (2+ users logged in).
 - **Hotplug supported:** connect, disconnect, and reconnect controllers freely at any time.
+- **GUI Configurator Included:** companion PS4 homebrew application to customize settings on-console without a PC.
+
+---
+
+## Companion App: Xbox Controller Configurator (Optional)
+
+An optional companion homebrew application (`.pkg`) is included for users who prefer to configure and preview plugin settings directly on their PS4:
+
+> **Note:** The configurator application is **completely optional**. The plugin works out of the box on its own without it, and settings can also be edited manually via `/data/GoldHEN/xbox_controller.ini`.
+
+<p align="center">
+  <img src="docs/images/xmb_preview.jpg" width="48%" alt="XMB Dashboard Preview" />
+  <img src="docs/images/app_settings.jpg" width="48%" alt="Configurator Settings" />
+</p>
+<p align="center">
+  <img src="docs/images/save_notification.jpg" width="48%" alt="Save Notification" />
+  <img src="docs/images/info_panel.jpg" width="48%" alt="Info & Documentation Panel" />
+</p>
+
+### Configurator Features:
+- **Comprehensive On-Console Configuration:** Adjust all 10 plugin parameters directly on your TV using a smooth 5-card scrollable viewport with real-time scrollbar and position tracking (Operating Mode, Guide Button, Stick Deadzone, Trigger Threshold, Swap Bumpers & Triggers, Vibration, GoldHEN Notifications, Mode Toggle Combo, Homebrew Navigation, and Switch Controller Layout).
+- **Automatic Initialization:** Automatically creates `/data/GoldHEN/xbox_controller.ini` on first boot if missing, or reads and updates existing configuration.
+- **Instant Save:** Press **Cross (X)** to save settings immediately with a real-time confirmation toast banner.
+
+---
 
 ### Supported Controllers
 
@@ -18,7 +43,8 @@ Xbox and Switch controllers work as:
 - Xbox Series X|S wired USB controller (with vibration support & Guide button)
 - Xbox Elite controllers (wired)
 
-**Third-Party Xbox Controllers (PowerA, Hori, Razer, 8BitDo, Mad Catz, PDP, etc.):**
+**Third-Party Xbox & XInput Controllers (PowerA, Hori, Razer, 8BitDo, Mad Catz, PDP, etc.):**
+- Compatible with Xbox One, Series X|S, 360, and **every standard XInput controller**.
 - Any wired controller in **XInput / Xbox mode** is detected automatically from its USB interface descriptor:
   - Xbox 360 compatible: class `FF/5D/01`
   - Xbox One compatible: class `FF/47/D0`
@@ -56,7 +82,7 @@ An on-screen notification will confirm the active mode. (Mode selection is tempo
 - **Mode Switch Combo:** Hold **LB + RB + Back + Start** for **1.5 seconds** to cycle modes (`AUTO` -> `SECONDARY (P2)` -> `MERGE (P1)`).
 
 ### What Works
-- Global `[default]` mode in `plugins.ini` (automatically active across all retail PS4 games; safely bypasses homebrew utilities so they never crash)
+- Global `[default]` mode in `plugins.ini` (automatically active across all retail PS4 games and homebrew apps; safely excludes system daemons)
 - Full button mapping (A/B/X/Y, bumpers, triggers, sticks, D-pad, Touchpad Click via Guide button, Share)
 - Dedicated 250 Hz background USB polling thread (non-blocking, low latency)
 - Dynamic descriptor-based detection for official and third-party controllers
@@ -84,6 +110,7 @@ An on-screen notification will confirm the active mode. (Mode selection is tempo
 
 ## Installation
 
+### 1. Plugin Installation (`xbox_controller.prx`)
 1. Connect to your PS4 via FTP (port 2121).
 2. Upload `xbox_controller.prx` to `/data/GoldHEN/plugins/`.
 3. Create or edit `/data/GoldHEN/plugins.ini`. Enable the plugin under `[default]` so it automatically works across all your games:
@@ -93,9 +120,59 @@ An on-screen notification will confirm the active mode. (Mode selection is tempo
    ```
    *(Alternatively, if you only want it on specific games, you can place it under a Title ID section such as `[CUSAXXXXX]`.)*
 
-4. Launch any game — the Xbox controller is automatically detected and ready. Homebrew apps (Apollo, Cheats Manager, Store, Itemzflow, PS4-Explorer) are automatically bypassed so they never crash under `[default]`.
+4. Launch any game or homebrew application — the Xbox controller is automatically detected and ready. Both retail games and homebrew tools (Apollo Save Tool, Itemzflow, PS4-Explorer, Homebrew Store, Configurator, etc.) are fully navigable with the controller, while background system daemons are safely excluded.
 
 To disable: remove or comment out the plugin line in `plugins.ini`.
+
+### 2. Configurator App Installation (`.pkg`, Optional)
+*(Optional: only needed if you wish to configure parameters directly on your TV via GUI. Without the app, the plugin continues to function normally.)*
+1. Copy `xbox_controller_configurator.pkg` to a USB drive (FAT32/exFAT) or transfer it via FTP.
+2. On your PS4, go to **GoldHEN** > **Package Installer**.
+3. Install `xbox_controller_configurator.pkg`.
+4. The **Xbox Controller Configurator** will appear directly on your PS4 dashboard (XMB). Launch it at any time to customize and save your settings!
+
+---
+
+## Configuration File (`xbox_controller.ini`)
+
+The plugin can optionally read persistent settings from `/data/GoldHEN/xbox_controller.ini`. 
+> **Note:** The configuration file is **completely optional**. If it does not exist, the plugin preserves default v1.4.0 behavior with zero setup required. You can edit this file manually via FTP or using the **Xbox Controller Configurator** companion app on your PS4.
+
+### Example Configuration:
+```ini
+[General]
+; Operating mode: auto (default), merge, secondary
+mode = auto
+
+; Central Xbox Guide button in-game action: touchpad (default), share, none
+guide_action = touchpad
+
+; Show on-screen connection and mode notifications: 1 (default), 0
+enable_notifications = 1
+
+; Allow in-game mode cycling combo (LB+RB+Back+Start): 1 (default), 0
+enable_mode_combo = 1
+
+; Enable controller vibration/rumble feedback: 1 (default), 0
+enable_rumble = 1
+
+; Support controller navigation inside homebrew apps: 1 (default), 0
+enable_homebrew = 1
+
+[Deadzone]
+; Stick inner deadzone (0-127, default 15 = ~12%)
+stick_deadzone = 15
+
+; Digital trigger activation threshold (0-255, default 30 = ~12%)
+trigger_threshold = 30
+
+[Remap]
+; Invert bumpers and triggers (LB/RB <-> LT/RT): 0 (default), 1
+swap_triggers_bumpers = 0
+
+; Nintendo Switch layout: 1 = positional (bottom=X, default), 0 = by letter (A=Circle)
+switch_positional_layout = 1
+```
 
 ---
 

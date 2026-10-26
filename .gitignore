@@ -1,6 +1,14 @@
 # Build artifacts
 bin/
 obj/
+app/bin/
+app/obj/
+app/eboot.bin
+app/*.pkg
+*.pkg
+
+# Internal & environment
+.gemini/
 
 # GoldHEN SDK compiled output (fetched and built locally)
 sdk/GoldHEN_Plugins_SDK/build/
@@ -17,3 +25,4 @@ sdk/goldhen_sdk_extracted/
 
 # Local development / internal handoff notes (not for public repo)
 ANALISI_REPO.md
+INTERNAL_BEST_PRACTICES.md

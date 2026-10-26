@@ -9,7 +9,7 @@
 // Plugin version
 #define PLUGIN_VERSION_MAJOR 1
 #define PLUGIN_VERSION_MINOR 4
-#define PLUGIN_VERSION_PATCH 0
+#define PLUGIN_VERSION_PATCH 1
 
 // Xbox 360 Controller USB identifiers
 #define XBOX360_VID             0x045E  // Microsoft Corporation
